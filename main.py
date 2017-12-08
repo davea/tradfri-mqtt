@@ -43,7 +43,11 @@ async def handle_message(topic: str, payload: bytes):
     if topic.endswith("power"):
         await api(light.light_control.set_state(payload == b'1'))
     if topic.endswith("brightness"):
-        brightness = max(0, min(254, float(payload)))
+        brightness = max(0, min(254, int(float(payload))))
+        # HomeKit ranges from 0–100, so 1% ends up as 2.54 on the MQTT topic
+        # Set TRADFRI brightness to 1 in this case.
+        if brightness == 2:
+            brightness = 1
         await api(light.light_control.set_dimmer(brightness))
     print(payload)
 
