@@ -1,45 +1,19 @@
 #!/usr/bin/env python
 import os
-import asyncio
-from random import randint
 
-from hbmqtt.client import MQTTClient, ClientException
-from hbmqtt.mqtt.constants import QOS_0
+from mqttwrapper.hbmqtt_backend import run_script
 
 from pytradfri.api.aiocoap_api import APIFactory
 from pytradfri import Gateway
 
+
 GATEWAY_IP = os.environ['GATEWAY_IP']
 GATEWAY_ID = os.environ['GATEWAY_ID']
 GATEWAY_PSK = os.environ['GATEWAY_PSK']
-
 LIGHT_ID = int(os.environ['LIGHT_ID'])
 
-MQTT_TOPICS = os.environ['MQTT_TOPICS'].split(",")
-MQTT_BROKER = os.environ['MQTT_BROKER']
 
-api, light = None, None
-
-
-async def mqtt_loop():
-    topics = [(topic, QOS_0) for topic in MQTT_TOPICS]
-    client = MQTTClient()
-    await client.connect(MQTT_BROKER)
-    await client.subscribe(topics)
-    try:
-        while True:
-            message = await client.deliver_message()
-            packet = message.publish_packet
-            topic = packet.variable_header.topic_name
-            payload = bytes(packet.payload.data)
-            await handle_message(topic, payload)
-        await client.unsubscribe(topics)
-        await client.disconnect()
-    except ClientException:
-        raise
-
-
-async def handle_message(topic: str, payload: bytes):
+async def handle_message(topic: str, payload: bytes, api, light):
     if topic.endswith("power"):
         await api(light.light_control.set_state(payload == b'1'))
     if topic.endswith("brightness"):
@@ -49,24 +23,21 @@ async def handle_message(topic: str, payload: bytes):
         if brightness == 2:
             brightness = 1
         await api(light.light_control.set_dimmer(brightness))
-    print(payload)
 
 
 async def setup_tradfri():
-    global api, light
     api_factory = APIFactory(host=GATEWAY_IP, psk_id=GATEWAY_ID, psk=GATEWAY_PSK)
     api = api_factory.request
     gateway = Gateway()
     light = await api(gateway.get_device(LIGHT_ID))
-
-
-async def main_loop():
-    await setup_tradfri()
-    await mqtt_loop()
+    return {
+        'api': api,
+        'light': light,
+    }
 
 
 def main():
-    asyncio.get_event_loop().run_until_complete(main_loop())
+    run_script(handle_message, context_callback=setup_tradfri)
 
 
 if __name__ == '__main__':
