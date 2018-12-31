@@ -1,19 +1,15 @@
 [[source]]
-
 url = "https://pypi.python.org/simple"
 verify_ssl = true
 name = "pypi"
 
-
 [packages]
-
 pytradfri = "*"
 aiocoap = "==0.4a1"
 dtlssocket = "*"
-mqttwrapper = {extras = ["hbmqtt"]}
-
+mqttwrapper = {editable = true, git = "https://github.com/davea/mqttwrapper.git"}
+hbmqtt = "*"
 
 [dev-packages]
-
 ipython = "*"
 pylint = "*"
