@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 import os
 import logging
-import asyncio
 
 from mqttwrapper import run_script
-
+from asgiref.sync import async_to_sync
 from pytradfri.api.aiocoap_api import APIFactory
 from pytradfri import Gateway
 
@@ -27,12 +26,11 @@ def handle_message(topic: str, payload: bytes, lights, outlets):
         value = max(0, min(254, int(float(payload))))
 
     if device_type == "switch":
-        asyncio.run(tradfri_set_outlet_state(device_id, value))
+        tradfri_set_outlet_state(device_id, value)
     elif device_type == "lighting" and attribute == "power":
-        asyncio.run(tradfri_set_light_state(device_id, value))
+        tradfri_set_light_state(device_id, value)
     elif device_type == "lighting" and attribute == "brightness":
-        asyncio.run(tradfri_set_light_dimmer(device_id, value))
-
+        tradfri_set_light_dimmer(device_id, value)
 
 async def tradfri_get_api_device(device_id):
     api_factory = APIFactory(host=GATEWAY_IP, psk_id=GATEWAY_ID, psk=GATEWAY_PSK)
@@ -42,16 +40,19 @@ async def tradfri_get_api_device(device_id):
     return api, device
 
 
+@async_to_sync
 async def tradfri_set_outlet_state(device_id, value):
     api, device = await tradfri_get_api_device(device_id)
     await api(device.socket_control.set_state(value))
 
 
+@async_to_sync
 async def tradfri_set_light_state(device_id, value):
     api, device = await tradfri_get_api_device(device_id)
     await api(device.light_control.set_state(value))
 
 
+@async_to_sync
 async def tradfri_set_light_dimmer(device_id, value):
     api, device = await tradfri_get_api_device(device_id)
     await api(device.light_control.set_dimmer(value))

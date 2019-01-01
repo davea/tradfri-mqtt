@@ -9,6 +9,7 @@ aiocoap = "==0.4a1"
 dtlssocket = "*"
 mqttwrapper = {editable = true, git = "https://github.com/davea/mqttwrapper.git"}
 hbmqtt = "*"
+asgiref = "*"
 
 [dev-packages]
 ipython = "*"
