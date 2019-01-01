@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 import os
 import logging
+import asyncio
 
-from mqttwrapper.hbmqtt_backend import run_script
+from mqttwrapper import run_script
 
 from pytradfri.api.aiocoap_api import APIFactory
 from pytradfri import Gateway
@@ -16,39 +17,45 @@ LIGHT_IDS = os.environ['LIGHT_IDS']
 OUTLET_IDS = os.environ['OUTLET_IDS']
 
 
-async def handle_message(topic: str, payload: bytes, api, lights, outlets):
+def handle_message(topic: str, payload: bytes, lights, outlets):
     device_type, device, attribute = topic.split("/")[1:]
-    if device_type == "lighting":
-        light = lights[device]
-        if topic.endswith("power"):
-            await api(light.light_control.set_state(payload == b'1'))
-        if topic.endswith("brightness"):
-            brightness = max(0, min(254, int(float(payload))))
-            # HomeKit ranges from 0–100, so 1% ends up as 2.54 on the MQTT topic
-            # Set TRADFRI brightness to 1 in this case.
-            if brightness == 2:
-                brightness = 1
-            await api(light.light_control.set_dimmer(brightness))
-    elif device_type == "switch":
-        outlet = outlets[device]
-        if topic.endswith("power"):
-            await api(outlet.socket_control.set_state(payload == b'1'))
+    device_id = lights[device] if device_type == "lighting" else outlets[device]
 
-async def get_devices(api, gateway, device_ids):
-    devices = {}
-    for device_id, topic in (x.split(":") for x in device_ids.split(",")):
-        devices[topic] = await api(gateway.get_device(device_id))
-    return devices
+    if attribute == "power":
+        value = payload == b'1'
+    elif attribute == "brightness":
+        value = max(0, min(254, int(float(payload))))
 
-async def setup_tradfri():
+    if device_type == "switch":
+        asyncio.run(tradfri_set_outlet_state(device_id, value))
+    elif device_type == "lighting" and attribute == "power":
+        asyncio.run(tradfri_set_light_state(device_id, value))
+    elif device_type == "lighting" and attribute == "brightness":
+        asyncio.run(tradfri_set_light_dimmer(device_id, value))
+
+
+async def tradfri_get_api_device(device_id):
     api_factory = APIFactory(host=GATEWAY_IP, psk_id=GATEWAY_ID, psk=GATEWAY_PSK)
     api = api_factory.request
     gateway = Gateway()
-    return {
-        'api': api,
-        'lights': await get_devices(api, gateway, LIGHT_IDS),
-        'outlets': await get_devices(api, gateway, OUTLET_IDS),
-    }
+    device = await api(gateway.get_device(device_id))
+    return api, device
+
+
+async def tradfri_set_outlet_state(device_id, value):
+    api, device = await tradfri_get_api_device(device_id)
+    await api(device.socket_control.set_state(value))
+
+
+async def tradfri_set_light_state(device_id, value):
+    api, device = await tradfri_get_api_device(device_id)
+    await api(device.light_control.set_state(value))
+
+
+async def tradfri_set_light_dimmer(device_id, value):
+    api, device = await tradfri_get_api_device(device_id)
+    await api(device.light_control.set_dimmer(value))
+
 
 def get_topics():
     lights = []
@@ -60,11 +67,16 @@ def get_topics():
         outlets.append("control/switch/{}/power".format(outlet))
     return lights + outlets
 
+
 def main():
     formatter = "[%(asctime)s] %(name)s %(levelname)s - %(message)s"
     logging.basicConfig(level=logging.DEBUG, format=formatter)
 
-    run_script(handle_message, topics=get_topics(), context_callback=setup_tradfri)
+    lights = {name: device_id for device_id, name in (i.split(":") for i in LIGHT_IDS.split(","))}
+    outlets = {name: device_id for device_id, name in (i.split(":") for i in OUTLET_IDS.split(","))}
+
+    run_script(handle_message, topics=get_topics(), lights=lights, outlets=outlets)
+
 
 if __name__ == '__main__':
     main()
