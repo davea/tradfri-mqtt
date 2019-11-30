@@ -5,7 +5,7 @@ name = "pypi"
 
 [packages]
 pytradfri = "*"
-aiocoap = "==0.4a1"
+aiocoap = "==0.4b1"
 dtlssocket = "*"
 mqttwrapper = {editable = true, git = "https://github.com/davea/mqttwrapper.git"}
 hbmqtt = "*"
